@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minha-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: minha-app
+  template:
+    metadata:
+      labels:
+        app: minha-app
+    spec:
+      containers:
+        - name: minha-app
+          image: 192.168.0.100:5000/minha-app:latest
+          ports:
+            - containerPort: 8080
