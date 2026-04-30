@@ -23,10 +23,8 @@ pipeline {
             steps {
                 script {
 
-                    // lista branches locais e remotas
                     bat 'git branch -a'
 
-                    // pega branch atual do git
                     def branchGit = bat(
                         script: "git rev-parse --abbrev-ref HEAD",
                         returnStdout: true
@@ -41,48 +39,44 @@ pipeline {
             }
         }
 
-        // 🔨 Compila o projeto
+        // 🔨 Build
         stage('Build') {
             steps {
                 bat 'gradlew.bat clean build'
             }
         }
 
-        // 🧪 Executa os testes
+        // 🧪 Testes
         stage('Test') {
             steps {
                 bat 'gradlew.bat test'
             }
         }
 
-        // 🚀 Versão + Deploy (SÓ MAIN)
+        // 🚀 Version + Deploy (SÓ MAIN)
         stage('Version + Deploy') {
 
-            // 🔥 CORREÇÃO IMPORTANTE AQUI
+            // ✅ CORREÇÃO DEFINITIVA
             when {
                 expression {
-                    return env.BRANCH_NAME == 'main'
+                    return env.GIT_BRANCH?.contains('main')
                 }
             }
 
             steps {
                 script {
 
-                    echo "🚀 Entrou no stage Version + Deploy"
+                    echo "🚀 Entrou no Version + Deploy"
 
-                    // 🔄 Atualiza tags do Git
                     bat 'git fetch --tags'
 
-                    // 📌 Último commit
                     def mensagemCommit = bat(
                         script: "git log -1 --pretty=%B",
                         returnStdout: true
                     ).trim()
 
-                    // 📌 Procura release/x.y.z
                     def encontrouRelease = mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/
 
-                    // 📌 Lista tags
                     def listaTags = bat(
                         script: "git tag",
                         returnStdout: true
@@ -91,7 +85,6 @@ pipeline {
                     listaTags = listaTags ? listaTags.split("\n") : []
                     listaTags = listaTags.findAll { it ==~ /\d+\.\d+\.\d+/ }
 
-                    // 📌 Ordena versões
                     listaTags.sort { a, b ->
                         def va = a.tokenize('.').collect { it.toInteger() }
                         def vb = b.tokenize('.').collect { it.toInteger() }
@@ -101,7 +94,6 @@ pipeline {
                     def ultimaVersao = listaTags ? listaTags.last() : null
                     def novaVersao
 
-                    // 🧠 Regra de versão
                     if (encontrouRelease) {
 
                         def versaoRelease = encontrouRelease[0][1]
@@ -129,10 +121,7 @@ pipeline {
                         }
                     }
 
-                    // 🔴 evita duplicar tag
                     if (listaTags.contains(novaVersao)) {
-                        echo "Tag já existe, incrementando..."
-
                         def u = novaVersao.tokenize('.').collect { it.toInteger() }
                         novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
                     }
@@ -144,7 +133,6 @@ pipeline {
                     echo "Imagem: ${REGISTRY}/${NOME_IMAGEM}:${tagImagem}"
                     echo "----------------------------------------"
 
-                    // 🔐 CRIA TAG NO GIT
                     withCredentials([usernamePassword(
                         credentialsId: 'github-token',
                         usernameVariable: 'GIT_USER',
@@ -162,16 +150,13 @@ pipeline {
                         """
                     }
 
-                    // 📦 Encontra o .jar
                     def caminhoJar = powershell(
                         script: "Get-ChildItem build/libs/*.jar | Select-Object -First 1 -ExpandProperty FullName",
                         returnStdout: true
                     ).trim()
 
-                    // 📤 Envia pro servidor Docker
                     bat "scp ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar"
 
-                    // 🐳 Build + push registry
                     bat """
                     ssh user@${SERVIDOR_DOCKER} ^
                     "docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} ^
@@ -180,7 +165,6 @@ pipeline {
                      docker push ${REGISTRY}/${NOME_IMAGEM}:latest"
                     """
 
-                    // ☸️ Deploy Argo CD
                     bat """
                     ssh user@${SERVIDOR_K8S} ^
                     "argocd app sync meu-app"
