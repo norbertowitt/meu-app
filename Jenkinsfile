@@ -3,10 +3,10 @@ pipeline {
 
     // 🌎 Variáveis de ambiente (configuração geral)
     environment {
-        SERVIDOR_DOCKER = "192.168.0.100"   // máquina onde roda o Docker
-        SERVIDOR_K8S = "192.168.0.110"      // máquina onde roda o Kubernetes / Argo CD
-        NOME_IMAGEM = "meu-app"             // nome da imagem Docker
-        REGISTRY = "192.168.0.100:5000"     // registry local Docker
+        SERVIDOR_DOCKER = "192.168.0.100"
+        SERVIDOR_K8S = "192.168.0.110"
+        NOME_IMAGEM = "meu-app"
+        REGISTRY = "192.168.0.100:5000"
     }
 
     stages {
@@ -15,6 +15,29 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        // 🔍 DEBUG: mostra qual branch o Jenkins realmente está usando
+        stage('DEBUG - Branch Info') {
+            steps {
+                script {
+
+                    // lista branches locais e remotas
+                    bat 'git branch -a'
+
+                    // pega branch atual do git
+                    def branchGit = bat(
+                        script: "git rev-parse --abbrev-ref HEAD",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "=============================="
+                    echo "BRANCH (Git): ${branchGit}"
+                    echo "BRANCH_NAME (Jenkins): ${env.BRANCH_NAME}"
+                    echo "GIT_BRANCH (Jenkins): ${env.GIT_BRANCH}"
+                    echo "=============================="
+                }
             }
         }
 
@@ -32,13 +55,20 @@ pipeline {
             }
         }
 
-        // 🚀 Versão + Deploy (só roda na main)
+        // 🚀 Versão + Deploy (SÓ MAIN)
         stage('Version + Deploy') {
+
+            // 🔥 CORREÇÃO IMPORTANTE AQUI
             when {
-                branch 'main'
+                expression {
+                    return env.BRANCH_NAME == 'main'
+                }
             }
+
             steps {
                 script {
+
+                    echo "🚀 Entrou no stage Version + Deploy"
 
                     // 🔄 Atualiza tags do Git
                     bat 'git fetch --tags'
@@ -110,11 +140,11 @@ pipeline {
                     def tagImagem = novaVersao
 
                     echo "----------------------------------------"
-                    echo "Nova versão: ${novaVersao}"
+                    echo "Versão final: ${novaVersao}"
                     echo "Imagem: ${REGISTRY}/${NOME_IMAGEM}:${tagImagem}"
                     echo "----------------------------------------"
 
-                    // 🔐 CRIA TAG USANDO CREDENCIAL DO GITHUB
+                    // 🔐 CRIA TAG NO GIT
                     withCredentials([usernamePassword(
                         credentialsId: 'github-token',
                         usernameVariable: 'GIT_USER',
@@ -141,7 +171,7 @@ pipeline {
                     // 📤 Envia pro servidor Docker
                     bat "scp ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar"
 
-                    // 🐳 Build + push para registry
+                    // 🐳 Build + push registry
                     bat """
                     ssh user@${SERVIDOR_DOCKER} ^
                     "docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} ^
@@ -150,7 +180,7 @@ pipeline {
                      docker push ${REGISTRY}/${NOME_IMAGEM}:latest"
                     """
 
-                    // ☸️ Deploy via Argo CD
+                    // ☸️ Deploy Argo CD
                     bat """
                     ssh user@${SERVIDOR_K8S} ^
                     "argocd app sync meu-app"
