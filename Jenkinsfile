@@ -116,7 +116,7 @@ pipeline {
                                 .split('[\\s\\r\\n]')[0]
                                 .trim()
 
-                            if (candidato ==~ /\d+\.\d+\.\d+/) {
+                            if (candidato ==~ /\\d+\\.\\d+\\.\\d+/) {
                                 versaoRelease = candidato
                             }
                         }
@@ -140,10 +140,10 @@ pipeline {
                     def listaTags = listaTagsRaw ? listaTagsRaw.split("\\r?\\n") : []
 
                     listaTags = listaTags.findAll {
-                        it ==~ /\d+\.\d+\.\d+/
+                        it ==~ /\\d+\\.\\d+\\.\\d+/
                     }
 
-                    listaTags.sort { a, b ->
+                    listaTags = listaTags.sort(false) { a, b ->
 
                         def va = a.tokenize('.').collect {
                             it.toInteger()
@@ -311,6 +311,12 @@ pipeline {
                     bat(script: "scp -v -o BatchMode=yes -o StrictHostKeyChecking=no \"${caminhoJar}\" ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/app.jar")
 
                     echo "✅ JAR enviado com sucesso."
+
+                    echo "📤 Enviando Dockerfile para servidor Docker..."
+
+                    bat(script: "scp -v -o BatchMode=yes -o StrictHostKeyChecking=no Dockerfile ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/Dockerfile")
+
+                    echo "✅ Dockerfile enviado com sucesso."
 
                     echo "🐳 Iniciando build e push da imagem Docker..."
 
