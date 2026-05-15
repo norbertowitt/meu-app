@@ -51,7 +51,7 @@ pipeline {
 
                 echo "🔨 Iniciando build da aplicação..."
 
-                bat(script: 'gradlew.bat clean build')
+                bat(script: 'gradlew.bat clean bootJar')
 
                 echo "✅ Build concluído com sucesso."
             }
@@ -127,12 +127,12 @@ pipeline {
 
                     echo "🏷️ Obtendo lista de tags existentes..."
 
-                    def listaTags = bat(
+                    def listaTagsRaw = bat(
                         script: 'git tag',
                         returnStdout: true
                     ).trim()
 
-                    listaTags = listaTags ? listaTags.split("\n") : []
+                    def listaTags = listaTagsRaw ? listaTagsRaw.split("\\r?\\n") : []
 
                     listaTags = listaTags.findAll {
                         it ==~ /\d+\.\d+\.\d+/
@@ -266,10 +266,16 @@ pipeline {
                         echo "✅ Tag enviada com sucesso."
                     }
 
-                    echo "📦 Procurando arquivo JAR gerado..."
+                    echo "📦 Procurando arquivo JAR Spring Boot..."
 
                     def caminhoJar = powershell(
-                        script: 'Get-ChildItem build/libs/*.jar | Select-Object -First 1 -ExpandProperty FullName',
+                        script: '''
+                        Get-ChildItem build/libs/*.jar |
+                        Where-Object {
+                            $_.Name -notlike "*-plain.jar"
+                        } |
+                        Select-Object -First 1 -ExpandProperty FullName
+                        ''',
                         returnStdout: true
                     ).trim()
 
@@ -279,11 +285,17 @@ pipeline {
                     echo "📏 Obtendo tamanho do arquivo JAR..."
 
                     def tamanhoJar = powershell(
-                        script: "((Get-Item '${caminhoJar}').Length / 1MB).ToString('0.00')",
+                        script: """
+                        ((Get-Item '${caminhoJar}').Length / 1MB).ToString('0.00')
+                        """,
                         returnStdout: true
                     ).trim()
 
                     echo "✅ Tamanho final do JAR: ${tamanhoJar} MB"
+
+                    echo "📂 Listando arquivos da pasta build/libs..."
+
+                    bat(script: 'dir build\\libs')
 
                     echo "📤 Enviando JAR para servidor Docker..."
 
