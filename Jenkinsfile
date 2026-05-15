@@ -4,6 +4,7 @@ pipeline {
     environment {
         SERVIDOR_DOCKER = "192.168.0.100"
         SERVIDOR_K8S = "192.168.0.110"
+        USUARIO_SSH = "norbertoneto"
         NOME_IMAGEM = "meu-app"
         REGISTRY = "192.168.0.100:5000"
     }
@@ -275,21 +276,30 @@ pipeline {
                     echo "✅ JAR encontrado:"
                     echo "${caminhoJar}"
 
+                    echo "📏 Obtendo tamanho do arquivo JAR..."
+
+                    def tamanhoJar = powershell(
+                        script: "((Get-Item '${caminhoJar}').Length / 1MB).ToString('0.00')",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "✅ Tamanho final do JAR: ${tamanhoJar} MB"
+
                     echo "📤 Enviando JAR para servidor Docker..."
 
-                    bat(script: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar")
+                    bat(script: "scp -o StrictHostKeyChecking=no \"${caminhoJar}\" ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/app.jar")
 
                     echo "✅ JAR enviado com sucesso."
 
                     echo "🐳 Iniciando build e push da imagem Docker..."
 
-                    bat(script: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null user@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/user && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\"")
+                    bat(script: "ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/${USUARIO_SSH} && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\"")
 
                     echo "✅ Build e push Docker concluídos com sucesso."
 
                     echo "☸️ Iniciando sincronização no ArgoCD..."
 
-                    bat(script: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null user@${SERVIDOR_K8S} \"argocd app sync meu-app\"")
+                    bat(script: "ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_K8S} \"argocd app sync meu-app\"")
 
                     echo "✅ Deploy sincronizado com sucesso no Kubernetes."
 
