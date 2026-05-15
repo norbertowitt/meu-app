@@ -1,7 +1,6 @@
 pipeline {
     agent any
 
-    // 🌎 Variáveis de ambiente
     environment {
         SERVIDOR_DOCKER = "192.168.0.100"
         SERVIDOR_K8S = "192.168.0.110"
@@ -11,7 +10,6 @@ pipeline {
 
     stages {
 
-        // 📥 Checkout do código
         stage('Checkout') {
             steps {
 
@@ -23,7 +21,6 @@ pipeline {
             }
         }
 
-        // 🔍 Debug de branch
         stage('DEBUG - Branch Info') {
             steps {
                 script {
@@ -48,7 +45,6 @@ pipeline {
             }
         }
 
-        // 🔨 Build
         stage('Build') {
             steps {
 
@@ -60,7 +56,6 @@ pipeline {
             }
         }
 
-        // 🧪 Testes
         stage('Test') {
             steps {
 
@@ -72,7 +67,6 @@ pipeline {
             }
         }
 
-        // 🚀 Versionamento e Deploy
         stage('Version + Deploy') {
 
             when {
@@ -254,9 +248,7 @@ pipeline {
 
                         echo "🔗 Configurando remote do Git..."
 
-                        bat(
-                            script: 'git remote set-url origin https://%GIT_USER%:%GIT_TOKEN%@github.com/norbertowitt/meu-app.git'
-                        )
+                        bat(script: 'git remote set-url origin https://%GIT_USER%:%GIT_TOKEN%@github.com/norbertowitt/meu-app.git')
 
                         echo "✅ Remote configurado."
 
@@ -285,27 +277,19 @@ pipeline {
 
                     echo "📤 Enviando JAR para servidor Docker..."
 
-                    bat(
-                        script: "scp ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar"
-                    )
+                    bat(script: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar")
 
                     echo "✅ JAR enviado com sucesso."
 
                     echo "🐳 Iniciando build e push da imagem Docker..."
 
-                    bat(
-                        script:
-                            "ssh user@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/user && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\""
-                    )
+                    bat(script: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null user@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/user && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\"")
 
                     echo "✅ Build e push Docker concluídos com sucesso."
 
                     echo "☸️ Iniciando sincronização no ArgoCD..."
 
-                    bat(
-                        script:
-                            "ssh user@${SERVIDOR_K8S} \"argocd app sync meu-app\""
-                    )
+                    bat(script: "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null user@${SERVIDOR_K8S} \"argocd app sync meu-app\"")
 
                     echo "✅ Deploy sincronizado com sucesso no Kubernetes."
 
