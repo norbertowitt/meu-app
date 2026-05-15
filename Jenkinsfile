@@ -260,13 +260,7 @@ pipeline {
                     echo "📦 Procurando arquivo JAR Spring Boot..."
 
                     def caminhoJar = powershell(
-                        script: '''
-                        Get-ChildItem build/libs/*.jar |
-                        Where-Object {
-                            $_.Name -notlike "*-plain.jar"
-                        } |
-                        Select-Object -First 1 -ExpandProperty FullName
-                        ''',
+                        script: 'Get-ChildItem build/libs/*.jar | Where-Object { $_.Name -notlike "*-plain.jar" } | Select-Object -First 1 -ExpandProperty FullName',
                         returnStdout: true
                     ).trim()
 
@@ -276,9 +270,7 @@ pipeline {
                     echo "📏 Obtendo tamanho do arquivo JAR..."
 
                     def tamanhoJar = powershell(
-                        script: """
-                        ((Get-Item '${caminhoJar}').Length / 1MB).ToString('0.00')
-                        """,
+                        script: "((Get-Item '${caminhoJar}').Length / 1MB).ToString('0.00')",
                         returnStdout: true
                     ).trim()
 
@@ -306,13 +298,7 @@ pipeline {
 
                     echo "🐳 Iniciando build e push da imagem Docker..."
 
-                    bat(script: """
-                    ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} ^
-                    "cd /home/${USUARIO_SSH} && ^
-                    docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest . && ^
-                    docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && ^
-                    docker push ${REGISTRY}/${NOME_IMAGEM}:latest"
-                    """)
+                    bat(script: "ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} \"cd /home/${USUARIO_SSH} && docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest . && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\"")
 
                     echo "✅ Build e push Docker concluídos com sucesso."
 
