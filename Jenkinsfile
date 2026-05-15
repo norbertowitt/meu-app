@@ -7,6 +7,7 @@ pipeline {
         USUARIO_SSH = "norbertoneto"
         NOME_IMAGEM = "meu-app"
         REGISTRY = "192.168.0.100:5000"
+        GRADLE_USER_HOME = "${WORKSPACE}\\.gradle"
     }
 
     stages {
@@ -17,6 +18,10 @@ pipeline {
                 echo "📥 Iniciando checkout do repositório..."
 
                 checkout scm
+
+                echo "🧹 Limpando cache Gradle antigo..."
+
+                bat(script: 'if exist .gradle rmdir /s /q .gradle')
 
                 echo "✅ Checkout realizado com sucesso."
             }
@@ -31,7 +36,7 @@ pipeline {
                     bat(script: 'git branch -a')
 
                     def branchGit = bat(
-                        script: 'git rev-parse --abbrev-ref HEAD',
+                        script: '@git rev-parse --abbrev-ref HEAD',
                         returnStdout: true
                     ).trim()
 
@@ -51,7 +56,7 @@ pipeline {
 
                 echo "🔨 Iniciando build da aplicação..."
 
-                bat(script: 'gradlew.bat clean bootJar')
+                bat(script: 'gradlew.bat clean bootJar --no-daemon')
 
                 echo "✅ Build concluído com sucesso."
             }
@@ -62,7 +67,7 @@ pipeline {
 
                 echo "🧪 Executando testes automatizados..."
 
-                bat(script: 'gradlew.bat test')
+                bat(script: 'gradlew.bat test --no-daemon')
 
                 echo "✅ Testes executados com sucesso."
             }
@@ -90,7 +95,7 @@ pipeline {
                     echo "📄 Obtendo mensagem do último commit..."
 
                     def mensagemCommit = bat(
-                        script: 'git log -1 --pretty=%%B',
+                        script: '@git log -1 --pretty=%%B',
                         returnStdout: true
                     ).trim()
 
@@ -128,7 +133,7 @@ pipeline {
                     echo "🏷️ Obtendo lista de tags existentes..."
 
                     def listaTagsRaw = bat(
-                        script: 'git tag',
+                        script: '@git tag',
                         returnStdout: true
                     ).trim()
 
@@ -297,9 +302,13 @@ pipeline {
 
                     bat(script: 'dir build\\libs')
 
+                    echo "🧪 Testando SSH..."
+
+                    bat(script: "ssh -v -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} exit")
+
                     echo "📤 Enviando JAR para servidor Docker..."
 
-                    bat(script: "scp -o StrictHostKeyChecking=no \"${caminhoJar}\" ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/app.jar")
+                    bat(script: "scp -v -o BatchMode=yes -o StrictHostKeyChecking=no \"${caminhoJar}\" ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/app.jar")
 
                     echo "✅ JAR enviado com sucesso."
 
