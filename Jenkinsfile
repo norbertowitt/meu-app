@@ -1,7 +1,7 @@
 pipeline {
     agent any
 
-    // 🌎 Variáveis de ambiente (configuração geral)
+    // 🌎 Variáveis de ambiente
     environment {
         SERVIDOR_DOCKER = "192.168.0.100"
         SERVIDOR_K8S = "192.168.0.110"
@@ -11,17 +11,24 @@ pipeline {
 
     stages {
 
-        // 📥 Baixa o código do repositório
+        // 📥 Checkout do código
         stage('Checkout') {
             steps {
+
+                echo "📥 Iniciando checkout do repositório..."
+
                 checkout scm
+
+                echo "✅ Checkout realizado com sucesso."
             }
         }
 
-        // 🔍 DEBUG: mostra qual branch o Jenkins realmente está usando
+        // 🔍 Debug de branch
         stage('DEBUG - Branch Info') {
             steps {
                 script {
+
+                    echo "🔍 Verificando informações da branch..."
 
                     bat(script: 'git branch -a')
 
@@ -35,6 +42,8 @@ pipeline {
                     echo "BRANCH_NAME (Jenkins): ${env.BRANCH_NAME}"
                     echo "GIT_BRANCH (Jenkins): ${env.GIT_BRANCH}"
                     echo "=============================="
+
+                    echo "✅ Informações da branch obtidas com sucesso."
                 }
             }
         }
@@ -42,18 +51,28 @@ pipeline {
         // 🔨 Build
         stage('Build') {
             steps {
+
+                echo "🔨 Iniciando build da aplicação..."
+
                 bat(script: 'gradlew.bat clean build')
+
+                echo "✅ Build concluído com sucesso."
             }
         }
 
         // 🧪 Testes
         stage('Test') {
             steps {
+
+                echo "🧪 Executando testes automatizados..."
+
                 bat(script: 'gradlew.bat test')
+
+                echo "✅ Testes executados com sucesso."
             }
         }
 
-        // 🚀 Version + Deploy (SÓ MAIN)
+        // 🚀 Versionamento e Deploy
         stage('Version + Deploy') {
 
             when {
@@ -65,16 +84,27 @@ pipeline {
             steps {
                 script {
 
-                    echo "🚀 Entrou no Version + Deploy"
+                    echo "🚀 Entrou na etapa de Version + Deploy"
+
+                    echo "📥 Buscando tags do repositório..."
 
                     bat(script: 'git fetch --tags')
+
+                    echo "✅ Tags obtidas com sucesso."
+
+                    echo "📄 Obtendo mensagem do último commit..."
 
                     def mensagemCommit = bat(
                         script: 'git log -1 --pretty=%B',
                         returnStdout: true
                     ).trim()
 
+                    echo "✅ Mensagem do commit obtida:"
+                    echo "${mensagemCommit}"
+
                     def encontrouRelease = mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/
+
+                    echo "🏷️ Obtendo lista de tags existentes..."
 
                     def listaTags = bat(
                         script: 'git tag',
@@ -102,12 +132,21 @@ pipeline {
                         va[2] <=> vb[2]
                     }
 
+                    echo "✅ Tags encontradas:"
+                    echo "${listaTags}"
+
                     def ultimaVersao = listaTags ? listaTags.last() : null
                     def novaVersao
 
+                    echo "🧠 Calculando próxima versão..."
+
                     if (encontrouRelease) {
 
+                        echo "📦 Commit contém release explícita."
+
                         def versaoRelease = encontrouRelease[0][1]
+
+                        echo "📦 Versão encontrada no commit: ${versaoRelease}"
 
                         if (!ultimaVersao) {
 
@@ -138,6 +177,8 @@ pipeline {
 
                     } else {
 
+                        echo "📦 Nenhuma release explícita encontrada."
+
                         if (!ultimaVersao) {
 
                             novaVersao = '1.0.0'
@@ -154,6 +195,8 @@ pipeline {
 
                     if (listaTags.contains(novaVersao)) {
 
+                        echo "⚠️ Tag já existe. Incrementando patch..."
+
                         def u = novaVersao.tokenize('.').collect {
                             it.toInteger()
                         }
@@ -163,10 +206,12 @@ pipeline {
 
                     def tagImagem = novaVersao
 
-                    echo '----------------------------------------'
-                    echo "Versão final: ${novaVersao}"
-                    echo "Imagem: ${REGISTRY}/${NOME_IMAGEM}:${tagImagem}"
-                    echo '----------------------------------------'
+                    echo "----------------------------------------"
+                    echo "✅ Versão final definida: ${novaVersao}"
+                    echo "🐳 Imagem Docker: ${REGISTRY}/${NOME_IMAGEM}:${tagImagem}"
+                    echo "----------------------------------------"
+
+                    echo "🔐 Iniciando autenticação GitHub..."
 
                     withCredentials([
                         usernamePassword(
@@ -176,45 +221,94 @@ pipeline {
                         )
                     ]) {
 
+                        echo "⚙️ Configurando usuário Git..."
+
                         bat(script: 'git config user.email "jenkins@local"')
 
                         bat(script: 'git config user.name "Jenkins"')
+
+                        echo "✅ Usuário Git configurado."
+
+                        echo "🔗 Configurando remote do Git..."
 
                         bat(
                             script: 'git remote set-url origin https://%GIT_USER%:%GIT_TOKEN%@github.com/norbertowitt/meu-app.git'
                         )
 
+                        echo "✅ Remote configurado."
+
+                        echo "🏷️ Criando tag ${novaVersao}..."
+
                         bat(script: "git tag ${novaVersao}")
 
+                        echo "✅ Tag criada com sucesso."
+
+                        echo "📤 Enviando tag para o GitHub..."
+
                         bat(script: "git push origin ${novaVersao}")
+
+                        echo "✅ Tag enviada com sucesso."
                     }
+
+                    echo "📦 Procurando arquivo JAR gerado..."
 
                     def caminhoJar = powershell(
                         script: 'Get-ChildItem build/libs/*.jar | Select-Object -First 1 -ExpandProperty FullName',
                         returnStdout: true
                     ).trim()
 
+                    echo "✅ JAR encontrado:"
+                    echo "${caminhoJar}"
+
+                    echo "📤 Enviando JAR para servidor Docker..."
+
                     bat(
                         script: "scp ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar"
                     )
+
+                    echo "✅ JAR enviado com sucesso."
+
+                    echo "🐳 Iniciando build e push da imagem Docker..."
 
                     bat(
                         script:
                             "ssh user@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/user && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\""
                     )
 
+                    echo "✅ Build e push Docker concluídos com sucesso."
+
+                    echo "☸️ Iniciando sincronização no ArgoCD..."
+
                     bat(
                         script:
                             "ssh user@${SERVIDOR_K8S} \"argocd app sync meu-app\""
                     )
+
+                    echo "✅ Deploy sincronizado com sucesso no Kubernetes."
+
+                    echo "🎉 Pipeline finalizado com sucesso."
                 }
             }
         }
     }
 
     post {
+
         always {
+
+            echo "📑 Publicando resultados dos testes..."
+
             junit '**/build/test-results/test/*.xml'
+
+            echo "✅ Publicação dos testes concluída."
+        }
+
+        success {
+            echo "🎉 PIPELINE EXECUTADO COM SUCESSO."
+        }
+
+        failure {
+            echo "❌ PIPELINE FINALIZADO COM ERRO."
         }
     }
 }
