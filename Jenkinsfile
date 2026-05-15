@@ -104,13 +104,25 @@ pipeline {
 
                     echo "🔍 Verificando se o commit possui release..."
 
-                    def matcherRelease = (mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/)
+                    def versaoRelease = null
 
-                    def possuiRelease = matcherRelease.find()
+                    if (mensagemCommit.contains('release/')) {
 
-                    def versaoRelease = possuiRelease
-                        ? matcherRelease.group(1)
-                        : null
+                        def partes = mensagemCommit.split('release/')
+
+                        if (partes.length > 1) {
+
+                            def candidato = partes[1]
+                                .split('[\\s\\r\\n]')[0]
+                                .trim()
+
+                            if (candidato ==~ /\d+\.\d+\.\d+/) {
+                                versaoRelease = candidato
+                            }
+                        }
+                    }
+
+                    def possuiRelease = versaoRelease != null
 
                     if (possuiRelease) {
                         echo "✅ Release encontrada no commit: ${versaoRelease}"
@@ -157,7 +169,6 @@ pipeline {
                     if (possuiRelease) {
 
                         echo "📦 Commit contém release explícita."
-
                         echo "📦 Versão encontrada no commit: ${versaoRelease}"
 
                         if (!ultimaVersao) {
