@@ -102,7 +102,21 @@ pipeline {
                     echo "✅ Mensagem do commit obtida:"
                     echo "${mensagemCommit}"
 
-                    def encontrouRelease = mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/
+                    echo "🔍 Verificando se o commit possui release..."
+
+                    def matcherRelease = (mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/)
+
+                    def possuiRelease = matcherRelease.find()
+
+                    def versaoRelease = possuiRelease
+                        ? matcherRelease.group(1)
+                        : null
+
+                    if (possuiRelease) {
+                        echo "✅ Release encontrada no commit: ${versaoRelease}"
+                    } else {
+                        echo "ℹ️ Nenhuma release encontrada no commit."
+                    }
 
                     echo "🏷️ Obtendo lista de tags existentes..."
 
@@ -140,11 +154,9 @@ pipeline {
 
                     echo "🧠 Calculando próxima versão..."
 
-                    if (encontrouRelease) {
+                    if (possuiRelease) {
 
                         echo "📦 Commit contém release explícita."
-
-                        def versaoRelease = encontrouRelease[0][1]
 
                         echo "📦 Versão encontrada no commit: ${versaoRelease}"
 
