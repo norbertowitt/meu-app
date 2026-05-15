@@ -143,25 +143,11 @@ pipeline {
                         it ==~ /\\d+\\.\\d+\\.\\d+/
                     }
 
-                    listaTags = listaTags.sort(false) { a, b ->
-
-                        def va = a.tokenize('.').collect {
-                            it.toInteger()
-                        }
-
-                        def vb = b.tokenize('.').collect {
-                            it.toInteger()
-                        }
-
-                        va[0] <=> vb[0] ?:
-                        va[1] <=> vb[1] ?:
-                        va[2] <=> vb[2]
-                    }
-
                     echo "✅ Tags encontradas:"
                     echo "${listaTags}"
 
-                    def ultimaVersao = listaTags ? listaTags.last() : null
+                    def ultimaVersao = listaTags ? listaTags.max() : null
+
                     def novaVersao
 
                     echo "🧠 Calculando próxima versão..."
@@ -320,7 +306,13 @@ pipeline {
 
                     echo "🐳 Iniciando build e push da imagem Docker..."
 
-                    bat(script: "ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/${USUARIO_SSH} && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\"")
+                    bat(script: """
+                    ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} ^
+                    "cd /home/${USUARIO_SSH} && ^
+                    docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest . && ^
+                    docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && ^
+                    docker push ${REGISTRY}/${NOME_IMAGEM}:latest"
+                    """)
 
                     echo "✅ Build e push Docker concluídos com sucesso."
 
