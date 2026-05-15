@@ -23,10 +23,10 @@ pipeline {
             steps {
                 script {
 
-                    bat 'git branch -a'
+                    bat(script: 'git branch -a')
 
                     def branchGit = bat(
-                        script: "git rev-parse --abbrev-ref HEAD",
+                        script: 'git rev-parse --abbrev-ref HEAD',
                         returnStdout: true
                     ).trim()
 
@@ -42,21 +42,20 @@ pipeline {
         // 🔨 Build
         stage('Build') {
             steps {
-                bat 'gradlew.bat clean build'
+                bat(script: 'gradlew.bat clean build')
             }
         }
 
         // 🧪 Testes
         stage('Test') {
             steps {
-                bat 'gradlew.bat test'
+                bat(script: 'gradlew.bat test')
             }
         }
 
         // 🚀 Version + Deploy (SÓ MAIN)
         stage('Version + Deploy') {
 
-            // ✅ CORREÇÃO DEFINITIVA
             when {
                 expression {
                     return env.GIT_BRANCH?.contains('main')
@@ -68,27 +67,39 @@ pipeline {
 
                     echo "🚀 Entrou no Version + Deploy"
 
-                    bat 'git fetch --tags'
+                    bat(script: 'git fetch --tags')
 
                     def mensagemCommit = bat(
-                        script: "git log -1 --pretty=%B",
+                        script: 'git log -1 --pretty=%B',
                         returnStdout: true
                     ).trim()
 
                     def encontrouRelease = mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/
 
                     def listaTags = bat(
-                        script: "git tag",
+                        script: 'git tag',
                         returnStdout: true
                     ).trim()
 
                     listaTags = listaTags ? listaTags.split("\n") : []
-                    listaTags = listaTags.findAll { it ==~ /\d+\.\d+\.\d+/ }
+
+                    listaTags = listaTags.findAll {
+                        it ==~ /\d+\.\d+\.\d+/
+                    }
 
                     listaTags.sort { a, b ->
-                        def va = a.tokenize('.').collect { it.toInteger() }
-                        def vb = b.tokenize('.').collect { it.toInteger() }
-                        va[0] <=> vb[0] ?: va[1] <=> vb[1] ?: va[2] <=> vb[2]
+
+                        def va = a.tokenize('.').collect {
+                            it.toInteger()
+                        }
+
+                        def vb = b.tokenize('.').collect {
+                            it.toInteger()
+                        }
+
+                        va[0] <=> vb[0] ?:
+                        va[1] <=> vb[1] ?:
+                        va[2] <=> vb[2]
                     }
 
                     def ultimaVersao = listaTags ? listaTags.last() : null
@@ -99,14 +110,28 @@ pipeline {
                         def versaoRelease = encontrouRelease[0][1]
 
                         if (!ultimaVersao) {
-                            novaVersao = versaoRelease
-                        } else {
-                            def r = versaoRelease.tokenize('.').collect { it.toInteger() }
-                            def u = ultimaVersao.tokenize('.').collect { it.toInteger() }
 
-                            if (r[0] > u[0] || (r[0] == u[0] && r[1] > u[1])) {
+                            novaVersao = versaoRelease
+
+                        } else {
+
+                            def r = versaoRelease.tokenize('.').collect {
+                                it.toInteger()
+                            }
+
+                            def u = ultimaVersao.tokenize('.').collect {
+                                it.toInteger()
+                            }
+
+                            if (
+                                r[0] > u[0] ||
+                                (r[0] == u[0] && r[1] > u[1])
+                            ) {
+
                                 novaVersao = versaoRelease
+
                             } else {
+
                                 novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
                             }
                         }
@@ -114,61 +139,74 @@ pipeline {
                     } else {
 
                         if (!ultimaVersao) {
-                            novaVersao = "1.0.0"
+
+                            novaVersao = '1.0.0'
+
                         } else {
-                            def u = ultimaVersao.tokenize('.').collect { it.toInteger() }
+
+                            def u = ultimaVersao.tokenize('.').collect {
+                                it.toInteger()
+                            }
+
                             novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
                         }
                     }
 
                     if (listaTags.contains(novaVersao)) {
-                        def u = novaVersao.tokenize('.').collect { it.toInteger() }
+
+                        def u = novaVersao.tokenize('.').collect {
+                            it.toInteger()
+                        }
+
                         novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
                     }
 
                     def tagImagem = novaVersao
 
-                    echo "----------------------------------------"
+                    echo '----------------------------------------'
                     echo "Versão final: ${novaVersao}"
                     echo "Imagem: ${REGISTRY}/${NOME_IMAGEM}:${tagImagem}"
-                    echo "----------------------------------------"
+                    echo '----------------------------------------'
 
-                    withCredentials([usernamePassword(
-                        credentialsId: 'github-token',
-                        usernameVariable: 'GIT_USER',
-                        passwordVariable: 'GIT_TOKEN'
-                    )]) {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'github-token',
+                            usernameVariable: 'GIT_USER',
+                            passwordVariable: 'GIT_TOKEN'
+                        )
+                    ]) {
 
-                        bat """
-                        git config user.email "jenkins@local"
-                        git config user.name "Jenkins"
+                        bat(script: 'git config user.email "jenkins@local"')
 
-                        git remote set-url origin https://%GIT_USER%:%GIT_TOKEN%@github.com/norbertowitt/meu-app.git
+                        bat(script: 'git config user.name "Jenkins"')
 
-                        git tag ${novaVersao}
-                        git push origin ${novaVersao}
-                        """
+                        bat(
+                            script: 'git remote set-url origin https://%GIT_USER%:%GIT_TOKEN%@github.com/norbertowitt/meu-app.git'
+                        )
+
+                        bat(script: "git tag ${novaVersao}")
+
+                        bat(script: "git push origin ${novaVersao}")
                     }
 
                     def caminhoJar = powershell(
-                        script: "Get-ChildItem build/libs/*.jar | Select-Object -First 1 -ExpandProperty FullName",
+                        script: 'Get-ChildItem build/libs/*.jar | Select-Object -First 1 -ExpandProperty FullName',
                         returnStdout: true
                     ).trim()
 
-                    bat "scp ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar"
+                    bat(
+                        script: "scp ${caminhoJar} user@${SERVIDOR_DOCKER}:/home/user/app.jar"
+                    )
 
-                    bat """
-                    ssh user@${SERVIDOR_DOCKER} ^
-                    "docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} ^
-                                  -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/user &&
-                     docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} &&
-                     docker push ${REGISTRY}/${NOME_IMAGEM}:latest"
-                    """
+                    bat(
+                        script:
+                            "ssh user@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/user && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\""
+                    )
 
-                    bat """
-                    ssh user@${SERVIDOR_K8S} ^
-                    "argocd app sync meu-app"
-                    """
+                    bat(
+                        script:
+                            "ssh user@${SERVIDOR_K8S} \"argocd app sync meu-app\""
+                    )
                 }
             }
         }
