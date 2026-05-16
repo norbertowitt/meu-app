@@ -309,6 +309,12 @@ pipeline {
 
                     echo "✅ JAR enviado com sucesso."
 
+                    echo "📤 Enviando Dockerfile para servidor Docker..."
+
+                    bat(script: "scp -v -o BatchMode=yes -o StrictHostKeyChecking=no Dockerfile ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/Dockerfile")
+
+                    echo "✅ Dockerfile enviado com sucesso."
+
                     echo "🐳 Iniciando build e push da imagem Docker..."
 
                     bat(script: "ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} \"docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest /home/${USUARIO_SSH} && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\"")
