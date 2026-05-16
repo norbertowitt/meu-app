@@ -19,10 +19,6 @@ pipeline {
 
                 checkout scm
 
-                echo "🧹 Limpando cache Gradle antigo..."
-
-                bat(script: 'if exist .gradle rmdir /s /q .gradle')
-
                 echo "✅ Checkout realizado com sucesso."
             }
         }
@@ -104,12 +100,12 @@ pipeline {
 
                     echo "🔍 Verificando se o commit possui release..."
 
-                    def matcherRelease = (mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/)
-
                     def versaoRelease = null
 
-                    if (matcherRelease.find()) {
-                        versaoRelease = matcherRelease.group(1)
+                    def releaseMatcher = mensagemCommit =~ /(?i)release\/(\d+\.\d+\.\d+)/
+
+                    if (releaseMatcher.find()) {
+                        versaoRelease = releaseMatcher.group(1)
                     }
 
                     def possuiRelease = versaoRelease != null
@@ -119,6 +115,8 @@ pipeline {
                     } else {
                         echo "ℹ️ Nenhuma release encontrada no commit."
                     }
+
+                    releaseMatcher = null
 
                     echo "🏷️ Obtendo lista de tags existentes..."
 
@@ -132,7 +130,9 @@ pipeline {
 
                     def listaTags = listaTagsRaw ? listaTagsRaw.readLines() : []
 
-                    listaTags = listaTags.collect { it.trim() }
+                    listaTags = listaTags.collect {
+                        it.trim()
+                    }
 
                     listaTags = listaTags.findAll {
                         it ==~ /\d+\.\d+\.\d+/
