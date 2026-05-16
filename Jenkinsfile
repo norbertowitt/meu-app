@@ -19,11 +19,8 @@ pipeline {
 
                 checkout scm
 
-                echo "🧹 Limpando cache Gradle antigo..."
-
-                bat(script: 'if exist .gradle rmdir /s /q .gradle')
-
                 echo "✅ Checkout realizado com sucesso."
+
             }
         }
 
