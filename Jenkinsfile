@@ -136,29 +136,33 @@ pipeline {
 
                     def listaTags = listaTagsRaw ? listaTagsRaw.split("\\r?\\n") : []
 
-                    listaTags = listaTags.findAll {
-                        it ==~ /\d+\.\d+\.\d+/
-                    }
+                    def ultimaVersao = null
 
-                    listaTags.sort { a, b ->
+                    listaTags.each { tag ->
 
-                        def va = a.tokenize('.').collect {
-                            it.toInteger()
+                        def partes = tag.tokenize('.').collect { it.toInteger() }
+
+                        if (partes.size() != 3) {
+                            return
                         }
 
-                        def vb = b.tokenize('.').collect {
-                            it.toInteger()
+                        if (!ultimaVersao) {
+                            ultimaVersao = tag
+                            return
                         }
 
-                        va[0] <=> vb[0] ?:
-                        va[1] <=> vb[1] ?:
-                        va[2] <=> vb[2]
+                        def atual = ultimaVersao.tokenize('.').collect { it.toInteger() }
+
+                        def maior =
+                            (partes[0] > atual[0]) ||
+                            (partes[0] == atual[0] && partes[1] > atual[1]) ||
+                            (partes[0] == atual[0] && partes[1] == atual[1] && partes[2] > atual[2])
+
+                        if (maior) {
+                            ultimaVersao = tag
+                        }
                     }
 
-                    echo "✅ Tags encontradas:"
-                    echo "${listaTags}"
-
-                    def ultimaVersao = listaTags ? listaTags.last() : null
                     def novaVersao
 
                     echo "🧠 Calculando próxima versão..."
