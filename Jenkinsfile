@@ -88,7 +88,7 @@ pipeline {
 
                     echo "📥 Buscando tags do repositório..."
 
-                    bat(script: 'git fetch --tags')
+                    bat(script: 'git fetch --tags --force')
 
                     echo "✅ Tags obtidas com sucesso."
 
@@ -104,22 +104,12 @@ pipeline {
 
                     echo "🔍 Verificando se o commit possui release..."
 
+                    def matcherRelease = (mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/)
+
                     def versaoRelease = null
 
-                    if (mensagemCommit.contains('release/')) {
-
-                        def partes = mensagemCommit.split('release/')
-
-                        if (partes.length > 1) {
-
-                            def candidato = partes[1]
-                                .split('[\\s\\r\\n]')[0]
-                                .trim()
-
-                            if (candidato ==~ /\\d+\\.\\d+\\.\\d+/) {
-                                versaoRelease = candidato
-                            }
-                        }
+                    if (matcherRelease.find()) {
+                        versaoRelease = matcherRelease.group(1)
                     }
 
                     def possuiRelease = versaoRelease != null
@@ -137,16 +127,38 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    def listaTags = listaTagsRaw ? listaTagsRaw.split("\\r?\\n") : []
+                    echo "📄 Tags RAW:"
+                    echo "${listaTagsRaw}"
+
+                    def listaTags = listaTagsRaw ? listaTagsRaw.readLines() : []
+
+                    listaTags = listaTags.collect { it.trim() }
 
                     listaTags = listaTags.findAll {
-                        it ==~ /\\d+\\.\\d+\\.\\d+/
+                        it ==~ /\d+\.\d+\.\d+/
+                    }
+
+                    listaTags = listaTags.sort(false) { a, b ->
+
+                        def va = a.tokenize('.').collect {
+                            it.toInteger()
+                        }
+
+                        def vb = b.tokenize('.').collect {
+                            it.toInteger()
+                        }
+
+                        va[0] <=> vb[0] ?:
+                        va[1] <=> vb[1] ?:
+                        va[2] <=> vb[2]
                     }
 
                     echo "✅ Tags encontradas:"
                     echo "${listaTags}"
 
-                    def ultimaVersao = listaTags ? listaTags.max() : null
+                    def ultimaVersao = listaTags ? listaTags.last() : null
+
+                    echo "🏷️ Última versão encontrada: ${ultimaVersao}"
 
                     def novaVersao
 
@@ -173,7 +185,8 @@ pipeline {
 
                             if (
                                 r[0] > u[0] ||
-                                (r[0] == u[0] && r[1] > u[1])
+                                (r[0] == u[0] && r[1] > u[1]) ||
+                                (r[0] == u[0] && r[1] == u[1] && r[2] > u[2])
                             ) {
 
                                 novaVersao = versaoRelease
@@ -202,9 +215,9 @@ pipeline {
                         }
                     }
 
-                    if (listaTags.contains(novaVersao)) {
+                    while (listaTags.contains(novaVersao)) {
 
-                        echo "⚠️ Tag já existe. Incrementando patch..."
+                        echo "⚠️ Tag ${novaVersao} já existe. Incrementando patch..."
 
                         def u = novaVersao.tokenize('.').collect {
                             it.toInteger()
