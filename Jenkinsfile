@@ -14,11 +14,8 @@ pipeline {
 
         stage('Checkout') {
             steps {
-
                 echo "📥 Iniciando checkout do repositório..."
-
                 checkout scm
-
                 echo "✅ Checkout realizado com sucesso."
             }
         }
@@ -26,9 +23,7 @@ pipeline {
         stage('DEBUG - Branch Info') {
             steps {
                 script {
-
                     echo "🔍 Verificando informações da branch..."
-
                     bat(script: 'git branch -a')
 
                     def branchGit = bat(
@@ -41,309 +36,137 @@ pipeline {
                     echo "BRANCH_NAME (Jenkins): ${env.BRANCH_NAME}"
                     echo "GIT_BRANCH (Jenkins): ${env.GIT_BRANCH}"
                     echo "=============================="
-
-                    echo "✅ Informações da branch obtidas com sucesso."
                 }
             }
         }
 
         stage('Build') {
             steps {
-
-                echo "🔨 Iniciando build da aplicação..."
-
+                echo "🔨 Build..."
                 bat(script: 'gradlew.bat clean bootJar --no-daemon')
-
-                echo "✅ Build concluído com sucesso."
             }
         }
 
         stage('Test') {
             steps {
-
-                echo "🧪 Executando testes automatizados..."
-
+                echo "🧪 Testes..."
                 bat(script: 'gradlew.bat test --no-daemon')
-
-                echo "✅ Testes executados com sucesso."
             }
         }
 
         stage('Version + Deploy') {
 
             when {
-                expression {
-                    return env.GIT_BRANCH?.contains('main')
-                }
+                expression { return env.GIT_BRANCH?.contains('main') }
             }
 
             steps {
                 script {
 
-                    echo "🚀 Entrou na etapa de Version + Deploy"
-
-                    echo "📥 Buscando tags do repositório..."
+                    echo "🚀 Version + Deploy"
 
                     bat(script: 'git fetch --tags --force')
-
-                    echo "✅ Tags obtidas com sucesso."
-
-                    echo "📄 Obtendo mensagem do último commit..."
 
                     def mensagemCommit = bat(
                         script: '@git log -1 --pretty=%%B',
                         returnStdout: true
                     ).trim()
 
-                    echo "✅ Mensagem do commit obtida:"
-                    echo "${mensagemCommit}"
-
-                    echo "🔍 Verificando se o commit possui release..."
-
-                    def versaoRelease = null
-
-                    def releaseMatcher = mensagemCommit =~ /(?i)release\/(\d+\.\d+\.\d+)/
-
-                    if (releaseMatcher.find()) {
-                        versaoRelease = releaseMatcher.group(1)
-                    }
-
-                    def possuiRelease = versaoRelease != null
-
-                    if (possuiRelease) {
-                        echo "✅ Release encontrada no commit: ${versaoRelease}"
-                    } else {
-                        echo "ℹ️ Nenhuma release encontrada no commit."
-                    }
-
-                    releaseMatcher = null
-
-                    echo "🏷️ Obtendo lista de tags existentes..."
+                    def versaoRelease = (mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/)?.find()
+                        ? (mensagemCommit =~ /release\/(\d+\.\d+\.\d+)/)[0][1]
+                        : null
 
                     def listaTagsRaw = bat(
                         script: '@git tag',
                         returnStdout: true
                     ).trim()
 
-                    echo "📄 Tags RAW:"
-                    echo "${listaTagsRaw}"
+                    def listaTags = listaTagsRaw ?
+                        listaTagsRaw.readLines().collect { it.trim() }.findAll { it ==~ /\d+\.\d+\.\d+/ }
+                        : []
 
-                    def listaTags = listaTagsRaw ? listaTagsRaw.readLines() : []
-
-                    listaTags = listaTags.collect {
-                        it.trim()
+                    listaTags = listaTags.sort { a, b ->
+                        def va = a.tokenize('.').collect { it.toInteger() }
+                        def vb = b.tokenize('.').collect { it.toInteger() }
+                        if (va[0] != vb[0]) return va[0] <=> vb[0]
+                        if (va[1] != vb[1]) return va[1] <=> vb[1]
+                        return va[2] <=> vb[2]
                     }
-
-                    listaTags = listaTags.findAll {
-                        it ==~ /\d+\.\d+\.\d+/
-                    }
-
-                    listaTags = listaTags.sort(false) { a, b ->
-
-                        def va = a.tokenize('.').collect {
-                            it.toInteger()
-                        }
-
-                        def vb = b.tokenize('.').collect {
-                            it.toInteger()
-                        }
-
-                        va[0] <=> vb[0] ?:
-                        va[1] <=> vb[1] ?:
-                        va[2] <=> vb[2]
-                    }
-
-                    echo "✅ Tags encontradas:"
-                    echo "${listaTags}"
 
                     def ultimaVersao = listaTags ? listaTags.last() : null
 
-                    echo "🏷️ Última versão encontrada: ${ultimaVersao}"
-
                     def novaVersao
 
-                    echo "🧠 Calculando próxima versão..."
+                    if (versaoRelease) {
 
-                    if (possuiRelease) {
+                        def r = versaoRelease.tokenize('.').collect { it.toInteger() }
+                        def u = ultimaVersao ? ultimaVersao.tokenize('.').collect { it.toInteger() } : null
 
-                        echo "📦 Commit contém release explícita."
-                        echo "📦 Versão encontrada no commit: ${versaoRelease}"
-
-                        if (!ultimaVersao) {
-
-                            novaVersao = versaoRelease
-
-                        } else {
-
-                            def r = versaoRelease.tokenize('.').collect {
-                                it.toInteger()
-                            }
-
-                            def u = ultimaVersao.tokenize('.').collect {
-                                it.toInteger()
-                            }
-
-                            if (
+                        if (!u ||
                                 r[0] > u[0] ||
                                 (r[0] == u[0] && r[1] > u[1]) ||
-                                (r[0] == u[0] && r[1] == u[1] && r[2] > u[2])
-                            ) {
-
-                                novaVersao = versaoRelease
-
-                            } else {
-
-                                novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
-                            }
+                                (r[0] == u[0] && r[1] == u[1] && r[2] > u[2])) {
+                            novaVersao = versaoRelease
+                        } else {
+                            novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
                         }
 
                     } else {
-
-                        echo "📦 Nenhuma release explícita encontrada."
-
-                        if (!ultimaVersao) {
-
-                            novaVersao = '1.0.0'
-
-                        } else {
-
-                            def u = ultimaVersao.tokenize('.').collect {
-                                it.toInteger()
-                            }
-
-                            novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
-                        }
+                        novaVersao = ultimaVersao ?
+                            "${ultimaVersao.tokenize('.')[0]}.${ultimaVersao.tokenize('.')[1]}.${ultimaVersao.tokenize('.')[2].toInteger() + 1}" :
+                            "1.0.0"
                     }
 
                     while (listaTags.contains(novaVersao)) {
-
-                        echo "⚠️ Tag ${novaVersao} já existe. Incrementando patch..."
-
-                        def u = novaVersao.tokenize('.').collect {
-                            it.toInteger()
-                        }
-
+                        def u = novaVersao.tokenize('.').collect { it.toInteger() }
                         novaVersao = "${u[0]}.${u[1]}.${u[2] + 1}"
                     }
 
                     def tagImagem = novaVersao
 
-                    echo "----------------------------------------"
-                    echo "✅ Versão final definida: ${novaVersao}"
-                    echo "🐳 Imagem Docker: ${REGISTRY}/${NOME_IMAGEM}:${tagImagem}"
-                    echo "----------------------------------------"
+                    echo "🐳 Versão: ${novaVersao}"
 
-                    echo "🔐 Iniciando autenticação GitHub..."
-
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'github-token',
-                            usernameVariable: 'GIT_USER',
-                            passwordVariable: 'GIT_TOKEN'
-                        )
-                    ]) {
-
-                        echo "⚙️ Configurando usuário Git..."
+                    withCredentials([usernamePassword(
+                        credentialsId: 'github-token',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )]) {
 
                         bat(script: 'git config user.email "jenkins@local"')
-
                         bat(script: 'git config user.name "Jenkins"')
-
-                        echo "✅ Usuário Git configurado."
-
-                        echo "🔗 Configurando remote do Git..."
-
                         bat(script: 'git remote set-url origin https://%GIT_USER%:%GIT_TOKEN%@github.com/norbertowitt/meu-app.git')
 
-                        echo "✅ Remote configurado."
-
-                        echo "🏷️ Criando tag ${novaVersao}..."
-
                         bat(script: "git tag ${novaVersao}")
-
-                        echo "✅ Tag criada com sucesso."
-
-                        echo "📤 Enviando tag para o GitHub..."
-
                         bat(script: "git push origin ${novaVersao}")
-
-                        echo "✅ Tag enviada com sucesso."
                     }
-
-                    echo "📦 Procurando arquivo JAR Spring Boot..."
 
                     def caminhoJar = powershell(
                         script: 'Get-ChildItem build/libs/*.jar | Where-Object { $_.Name -notlike "*-plain.jar" } | Select-Object -First 1 -ExpandProperty FullName',
                         returnStdout: true
                     ).trim()
 
-                    echo "✅ JAR encontrado:"
-                    echo "${caminhoJar}"
-
-                    echo "📏 Obtendo tamanho do arquivo JAR..."
-
-                    def tamanhoJar = powershell(
-                        script: "((Get-Item '${caminhoJar}').Length / 1MB).ToString('0.00')",
-                        returnStdout: true
-                    ).trim()
-
-                    echo "✅ Tamanho final do JAR: ${tamanhoJar} MB"
-
-                    echo "📂 Listando arquivos da pasta build/libs..."
-
                     bat(script: 'dir build\\libs')
 
-                    echo "🧪 Testando SSH..."
+                    // =========================
+                    // SSH / SCP EM UMA LINHA
+                    // =========================
 
-                    bat(script: "ssh -v -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} exit")
-
-                    echo "📤 Enviando JAR para servidor Docker..."
-
-                    bat(script: "scp -v -o BatchMode=yes -o StrictHostKeyChecking=no \"${caminhoJar}\" ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/app.jar")
-
-                    echo "✅ JAR enviado com sucesso."
-
-                    echo "📤 Enviando Dockerfile para servidor Docker..."
-
-                    bat(script: "scp -v -o BatchMode=yes -o StrictHostKeyChecking=no Dockerfile ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/Dockerfile")
-
-                    echo "✅ Dockerfile enviado com sucesso."
-
-                    echo "🐳 Iniciando build e push da imagem Docker..."
+                    bat(script: "scp -o StrictHostKeyChecking=no \"${caminhoJar}\" ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/app.jar")
+                    bat(script: "scp -o StrictHostKeyChecking=no Dockerfile ${USUARIO_SSH}@${SERVIDOR_DOCKER}:/home/${USUARIO_SSH}/Dockerfile")
 
                     bat(script: "ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_DOCKER} \"cd /home/${USUARIO_SSH} && docker build -t ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} -t ${REGISTRY}/${NOME_IMAGEM}:latest . && docker push ${REGISTRY}/${NOME_IMAGEM}:${tagImagem} && docker push ${REGISTRY}/${NOME_IMAGEM}:latest\"")
 
-                    echo "✅ Build e push Docker concluídos com sucesso."
-
-                    echo "☸️ Iniciando sincronização no ArgoCD..."
-
                     bat(script: "ssh -o StrictHostKeyChecking=no ${USUARIO_SSH}@${SERVIDOR_K8S} \"argocd app sync meu-app\"")
 
-                    echo "✅ Deploy sincronizado com sucesso no Kubernetes."
-
-                    echo "🎉 Pipeline finalizado com sucesso."
+                    echo "🎉 Finalizado"
                 }
             }
         }
     }
 
     post {
-
         always {
-
-            echo "📑 Publicando resultados dos testes..."
-
             junit '**/build/test-results/test/*.xml'
-
-            echo "✅ Publicação dos testes concluída."
-        }
-
-        success {
-            echo "🎉 PIPELINE EXECUTADO COM SUCESSO."
-        }
-
-        failure {
-            echo "❌ PIPELINE FINALIZADO COM ERRO."
         }
     }
 }
