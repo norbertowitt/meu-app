@@ -127,7 +127,12 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    def listaTags = listaTagsRaw ? listaTagsRaw.split("\\r?\\n") : []
+                    echo "📄 Tags RAW:"
+                    echo "${listaTagsRaw}"
+
+                    def listaTags = listaTagsRaw ? listaTagsRaw.readLines() : []
+
+                    listaTags = listaTags.collect { it.trim() }
 
                     listaTags = listaTags.findAll {
                         it ==~ /\d+\.\d+\.\d+/
